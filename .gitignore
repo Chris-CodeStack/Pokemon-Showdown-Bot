@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.venv/
+env/
+
+# Pokémon Showdown submodule/clone dependencies
+pokemon-showdown/node_modules/
+pokemon-showdown/logs/
+pokemon-showdown/config/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
