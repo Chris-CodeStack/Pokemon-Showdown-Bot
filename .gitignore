@@ -1,19 +1,31 @@
-# Python
+# Python artifacts
 __pycache__/
 *.py[cod]
 *$py.class
-*.env
+*.so
+.Python
+
+# Virtual Environment
 venv/
 .venv/
 env/
+ENV/
 
-# Pokémon Showdown submodule/clone dependencies
-pokemon-showdown/node_modules/
-pokemon-showdown/logs/
-pokemon-showdown/config/
+# Data and Models (Do NOT push large raw scrape batches or checkpoints to GitHub)
+data/raw_replays/
+data/processed_dataset.npz
+*.pt
+*.pth
+*.onnx
 
-# IDE / OS
+# Jupyter / Checkpoints
+.ipynb_checkpoints/
+
+# IDE / Operating System files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Log files
+*.log
