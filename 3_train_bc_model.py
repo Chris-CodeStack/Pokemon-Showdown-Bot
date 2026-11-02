@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import torch
 import torch.nn as nn
@@ -26,21 +27,17 @@ class VGCBehaviorCloningNet(nn.Module):
         logits = self.action_head(features)
         return logits
 
-
 def compute_accuracies(logits, targets, k=3):
     with torch.no_grad():
-        # Top-1 Accuracy
         preds_top1 = torch.argmax(logits, dim=1)
         top1_acc = (preds_top1 == targets).float().mean().item() * 100.0
 
-        # Top-k Accuracy
         actual_k = min(k, logits.shape[1])
         _, topk_preds = logits.topk(actual_k, dim=1, largest=True, sorted=True)
         topk_correct = topk_preds.eq(targets.view(-1, 1).expand_as(topk_preds))
         topk_acc = topk_correct.any(dim=1).float().mean().item() * 100.0
 
         return top1_acc, topk_acc
-
 
 def run_training():
     dataset_path = "data/processed_dataset.npz"
@@ -106,6 +103,12 @@ def run_training():
 
     best_val_loss = float("inf")
 
+    # --- INITIALIZE HISTORY LISTS HERE ---
+    train_loss_history = []
+    val_loss_history = []
+    val_top1_history = []
+    val_top3_history = []
+
     for epoch in range(1, epochs + 1):
         # Training Phase
         model.train()
@@ -143,21 +146,72 @@ def run_training():
 
         print(f"{epoch:<6} | {train_loss:<12.4f} | {val_loss:<10.4f} | {val_top1:<15.2f} | {val_top3:<15.2f}")
 
+        # --- APPEND METRICS TO HISTORY LISTS HERE ---
+        train_loss_history.append(train_loss)
+        val_loss_history.append(val_loss)
+        val_top1_history.append(val_top1)
+        val_top3_history.append(val_top3)
+
         # Save checkpoint if best validation score
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), "vgc_bc_model.pt")
+            
+    # Save training history JSON for plotting
+    os.makedirs("data", exist_ok=True)
+    history = {
+        "epochs": list(range(1, epochs + 1)),
+        "train_loss": train_loss_history,
+        "val_loss": val_loss_history,
+        "val_top1": val_top1_history,
+        "val_top3": val_top3_history
+    }
+    with open("data/training_history.json", "w") as f:
+        json.dump(history, f)
 
     print("\n" + "=" * 55)
     print("FINAL TEST EVALUATION (vgc_bc_model.pt)")
     print("=" * 55)
     model.load_state_dict(torch.load("vgc_bc_model.pt"))
     model.eval()
-
     test_loss_accum = 0.0
     test_logits_list = []
     test_targets_list = []
+    all_probs = []
+    all_preds = []
+    all_targets = []
 
+    with torch.no_grad():
+        for batch_x, batch_y in test_loader:
+            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+            logits = model(batch_x)
+            
+            # Accumulate loss
+            test_loss_accum += criterion(logits, batch_y).item() * len(batch_y)
+            test_logits_list.append(logits)
+            test_targets_list.append(batch_y)
+            
+            # Extract probabilities for calibration curve
+            probs = torch.softmax(logits, dim=1)
+            confidences, preds = torch.max(probs, dim=1)
+            
+            all_probs.extend(confidences.cpu().numpy())
+            all_preds.extend(preds.cpu().numpy())
+            all_targets.extend(batch_y.cpu().numpy())
+
+    test_loss = test_loss_accum / len(test_loader.dataset)
+    test_top1, test_top3 = compute_accuracies(
+        torch.cat(test_logits_list), torch.cat(test_targets_list), k=3
+    )
+    all_probs = np.array(all_probs)
+    all_preds = np.array(all_preds)
+    all_targets = np.array(all_targets)
+
+    # Create a binary array: 1 if the top-1 prediction was correct, 0 otherwise
+    accuracies = (all_preds == all_targets).astype(int)
+
+    np.savez("data/calibration_data.npz", accuracies=accuracies, confidences=all_probs)
+    
     with torch.no_grad():
         for batch_x, batch_y in test_loader:
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
