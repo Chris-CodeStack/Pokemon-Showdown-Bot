@@ -39,7 +39,5 @@ def generate_calibration_plot(y_true_binary, y_prob):
     plt.show()
 
 if __name__ == "__main__":
-    dummy_binary = np.random.choice([0, 1], size=500, p=[0.3, 0.7])
-    dummy_probs = np.random.uniform(0.4, 1.0, size=500)
-    
-    generate_calibration_plot(dummy_binary, dummy_probs)
+    data = np.load("data/calibration_data.npz")
+    generate_calibration_plot(data["accuracies"], data["confidences"])
